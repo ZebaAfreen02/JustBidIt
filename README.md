@@ -21,7 +21,6 @@ The platform also includes customer support and administrative tools for managin
 ### User Accounts and Authentication
 
 - User registration and login
-- Password hashing and authentication
 - Password recovery and reset functionality
 - Account-related forms and validation
 
