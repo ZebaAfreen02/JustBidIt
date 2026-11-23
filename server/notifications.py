@@ -1,8 +1,7 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, session
 from auth import db
 from datetime import datetime
 from sqlalchemy import text
-from flask import request
 
 notification_bp = Blueprint('notification', __name__)
 
@@ -16,13 +15,12 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime)
 
 @notification_bp.route('/api/notifications', methods=['GET'])
-@notification_bp.route('/api/notifications', methods=['GET'])
 def get_notifications():
-    user_id = request.args.get('user_id')
-    if user_id:
-        notifications = Notification.query.filter_by(user_id=user_id).all()
-    else:
-        notifications = Notification.query.all()
+    user_id = session.get("user_id")
+    if user_id is None:
+        return jsonify(error="Unauthorized"), 401
+
+    notifications = Notification.query.filter_by(user_id=user_id).all()
 
     result = [
         {
@@ -48,9 +46,9 @@ def create_notification(user_id, message, notif_type='info'):
 
 @notification_bp.route('/api/notifications/clear', methods=['POST'])
 def clear_notifications():
-    user_id = request.json.get('user_id')
-    if not user_id:
-        return jsonify({"error": "Missing user_id"}), 400
+    user_id = session.get("user_id")
+    if user_id is None:
+        return jsonify(error="Unauthorized"), 401
 
     Notification.query.filter_by(user_id=user_id).delete()
     db.session.commit()

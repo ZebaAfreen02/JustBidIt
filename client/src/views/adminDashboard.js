@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import { useState } from 'react';
 import CreateCustomerRep from './createCustRep';
 import SalesReport from './salesReport';
@@ -7,9 +8,23 @@ import '../styles/adminDashboard.css';
 export default function AdminDashboard() {
   const [activeSection, setActiveSection] = useState('create');
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+  try {
+    const response = await csrfFetch('/admin/logout', {
+      method: 'POST',
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      throw new Error('Logout failed');
+    }
+
     window.location.href = '/admin-login';
-  };
+  } catch (error) {
+    console.error('Logout error:', error);
+    alert('Unable to log out. Please try again.');
+  }
+};
 
   const renderPanel = () => {
     switch (activeSection) {

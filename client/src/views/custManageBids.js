@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import { useState, useEffect } from 'react';
 import '../styles/custRepDashboard.css';
 import { Trash2 } from 'lucide-react';
@@ -10,16 +11,18 @@ export default function ManageBids() {
 
 
   useEffect(() => {
-    fetch('/api/customer-rep/get-bids')
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          setBids(data.bids);
-        } else {
-          alert('Error fetching bids.');
-        }
-      });
-  }, []);
+fetch('/api/customer-rep/get-bids', {
+  credentials: 'include'
+})
+  .then(res => res.json())
+  .then(data => {
+    if (data.status === 'success') {
+      setBids(data.bids);
+    } else {
+      alert('Error fetching bids.');
+    }
+  });
+}, []);
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
@@ -36,7 +39,10 @@ export default function ManageBids() {
   const handleDeleteBid = async (bidId) => {
     if (!window.confirm('Are you sure you want to delete this bid?')) return;
     try {
-      const res = await fetch(`/api/customer-rep/delete-bid/${bidId}`, { method: 'DELETE' });
+      const res = await csrfFetch(`/api/customer-rep/delete-bid/${bidId}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
       const data = await res.json();
       if (data.status === 'success') {
         setBids(prev => prev.filter(bid => bid.id !== bidId));

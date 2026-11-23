@@ -1,4 +1,6 @@
-from flask import Blueprint, jsonify, request
+import token
+
+from flask import Blueprint, jsonify, request, session
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
@@ -8,6 +10,9 @@ import smtplib
 import ssl
 import string
 import random
+import os
+import secrets
+from extensions import limiter
 from email.mime.text import MIMEText
 
 # Initialize DB and Blueprint
@@ -21,7 +26,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(100), nullable=False, unique=True)
     username = db.Column(db.String(100), nullable=False, unique=True)
-    password = db.Column(db.String(100), nullable=False)
+    password = db.Column(db.String(255), nullable=False)
     account_type = db.Column(db.String(20), nullable=False)
     full_name = db.Column(db.String(100), nullable=True)
     business_name = db.Column(db.String(100), nullable=True)
@@ -38,13 +43,17 @@ class PasswordReset(db.Model):
 # ---------- HELPERS ----------
 
 def generate_token(length=32):
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+    return secrets.token_urlsafe(length)
 
 def send_reset_email(recipient_email, token):
 
-    sender_email = "justbidittest@gmail.com"
-    app_password = "nwatbaohmbwrftnk"  # no spaces
-    reset_link = f"http://localhost:3000/reset-password?token={token}"
+    sender_email = os.environ.get("GMAIL_SENDER_EMAIL")
+    app_password = os.environ.get("GMAIL_APP_PASSWORD")
+
+    if not sender_email or not app_password:
+        raise RuntimeError("Gmail SMTP credentials are not configured")
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+    reset_link = f"{frontend_url.rstrip('/')}/reset-password?token={token}"
 
     try:
         message = MIMEText(f"Click the link to reset your password:\n\n{reset_link}", "plain")
@@ -66,16 +75,8 @@ def send_reset_email(recipient_email, token):
 
 # ---------- ROUTES ----------
 
-@auth_bp.route("/users", methods=["GET"])
-def get_users():
-    users = User.query.all()
-    user_list = [
-        {"id": user.id, "email": user.email, "username": user.username}
-        for user in users
-    ]
-    return jsonify(user_list)
-
 @auth_bp.route("/login", methods=["POST"])
+@limiter.limit("5 per minute")
 def login():
     data = request.json
     email = data.get("email")
@@ -85,8 +86,11 @@ def login():
         return jsonify({"status": "error", "message": "Missing email or password"}), 400
 
     user = User.query.filter_by(email=email).first()
-    # if user and check_password_hash(user.password, password):
-    if user:
+
+    if user and check_password_hash(user.password, password):
+        session.clear()
+        session["user_id"] = user.id
+
         return jsonify({
             "status": "success",
             "message": "Login successful",
@@ -98,6 +102,21 @@ def login():
         })
     else:
         return jsonify({"status": "error", "message": "Invalid credentials"}), 401
+
+@auth_bp.route("/logout", methods=["POST"])
+def logout():
+    if "user_id" not in session:
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized"
+        }), 401
+
+    session.clear()
+
+    return jsonify({
+        "status": "success",
+        "message": "Logged out successfully"
+    }), 200
 
 @auth_bp.route("/signup", methods=["POST"])
 def signup():
@@ -123,7 +142,7 @@ def signup():
     new_user = User(
         email=email,
         username=username,
-        password=password,
+        password=generate_password_hash(password),
         account_type= account_type,
         full_name=full_name,
         business_name=business_name,
@@ -136,13 +155,24 @@ def signup():
     return jsonify({"status": "success", "message": "User registered successfully"}), 201
 
 @auth_bp.route("/request-reset", methods=["POST"])
+@limiter.limit("3 per 15 minutes")
 def request_reset():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     email = data.get("email")
-    user = User.query.filter_by(email=email).first()
+
+    if not isinstance(email, str) or not email.strip():
+        return jsonify({
+            "status": "error",
+            "message": "Email is required"
+        }), 400
+
+    user = User.query.filter_by(email=email.strip()).first()
 
     if not user:
-        return jsonify({"status": "error", "message": "No account with that email"}), 404
+        return jsonify({
+            "status": "success",
+            "message": "If an account exists with this email, a reset link will be sent."
+        }), 200
 
     token = generate_token()
     expiration = datetime.utcnow() + timedelta(minutes=15)
@@ -159,19 +189,41 @@ def request_reset():
         print("Email error:", e)
         return jsonify({"status": "error", "message": "Failed to send email"}), 500
 
+
 @auth_bp.route("/reset-password", methods=["POST"])
 def reset_password():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     token = data.get("token")
     new_password = data.get("newPassword")
 
-    reset_entry = PasswordReset.query.filter_by(token=token).first()
-    if not reset_entry or reset_entry.expires_at < datetime.utcnow():
-        return jsonify({"status": "error", "message": "Invalid or expired token"}), 400
+    if not token or not isinstance(new_password, str) or not new_password:
+        return jsonify({
+            "status": "error",
+            "message": "Reset token and new password are required"
+        }), 400
 
-    user = User.query.get(reset_entry.user_id)
+    reset_entry = PasswordReset.query.filter_by(token=token).first()
+
+    if not reset_entry or reset_entry.expires_at < datetime.utcnow():
+        return jsonify({
+            "status": "error",
+            "message": "Invalid or expired token"
+        }), 400
+
+    user = db.session.get(User, reset_entry.user_id)
+
+    if not user:
+        return jsonify({
+            "status": "error",
+            "message": "Invalid reset request"
+        }), 400
+
     user.password = generate_password_hash(new_password)
+
     db.session.delete(reset_entry)
     db.session.commit()
 
-    return jsonify({"status": "success", "message": "Password has been reset"}), 200
+    return jsonify({
+        "status": "success",
+        "message": "Password has been reset"
+    }), 200

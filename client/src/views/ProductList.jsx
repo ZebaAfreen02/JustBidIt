@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../styles/products.css";
@@ -40,7 +41,7 @@ function ProductList() {
   useEffect(() => {
     const userId = localStorage.getItem("userId");
     if (userId) {
-      fetch(`http://localhost:8000/api/notifications?user_id=${userId}`)
+      fetch(`/api/notifications`)
         .then(res => res.json())
         .then(data => {
           setNotifications(data);
@@ -50,7 +51,7 @@ function ProductList() {
   }, []);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/products")
+    fetch("/api/products")
       .then((res) => res.json())
       .then((data) => {
         setProducts(data);
@@ -106,10 +107,9 @@ function ProductList() {
 
   const handleClearNotifications = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/notifications/clear", {
+      const response = await csrfFetch("/api/notifications/clear", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: localStorage.getItem("userId") }),
       });
 
       const data = await response.json();

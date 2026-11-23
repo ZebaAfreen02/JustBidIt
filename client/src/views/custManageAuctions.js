@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import { useState, useEffect } from 'react';
 import { Eye, Trash2, Flag } from 'lucide-react';
 import { Modal, Button } from 'react-bootstrap';
@@ -12,7 +13,9 @@ export default function ManageAuctions() {
   const [infoPopupId, setInfoPopupId] = useState(null);
 
   useEffect(() => {
-    fetch('/api/customer-rep/get-auctions')
+    fetch('/api/customer-rep/get-auctions', {
+        credentials: 'include'
+      })
       .then(res => res.json())
       .then(data => {
         if (data.status === 'success') {
@@ -57,8 +60,9 @@ export default function ManageAuctions() {
   });
 
   const handleDelete = async () => {
-    fetch(`/api/customer-rep/delete-auction/${auctionToDelete.id}`, {
-      method: 'DELETE'
+    csrfFetch(`/api/customer-rep/delete-auction/${auctionToDelete.id}`, {
+      method: 'DELETE',
+      credentials: 'include'
     })
       .then(res => res.json())
       .then(data => {

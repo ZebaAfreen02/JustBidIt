@@ -1,12 +1,26 @@
-from flask import Blueprint, request, render_template, redirect, url_for, session, jsonify
+from flask import Blueprint, request, render_template, redirect, url_for, session, jsonify, current_app
 from sqlalchemy import text
-import hashlib
 from auth import db 
+from extensions import limiter
+from functools import wraps
 
 support_bp = Blueprint('support', __name__, url_prefix='/api')
+def rep_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'rep_id' not in session and 'admin_id' not in session:
+            return jsonify({
+                "status": "error",
+                "message": "Unauthorized"
+            }), 401
+
+        return f(*args, **kwargs)
+
+    return decorated_function
 
 # Customer Rep password reset
 @support_bp.route('/request-password-reset', methods=['POST'])
+@limiter.limit("3 per 15 minutes")
 def request_password_reset():
     data = request.get_json()
     username = data.get('username')
@@ -15,28 +29,33 @@ def request_password_reset():
         return jsonify({"status": "error", "message": "Username is required"}), 400
 
     try:
-        with db.engine.connect() as conn:
+        with db.engine.begin() as conn:
             result = conn.execute(
                 text("SELECT * FROM customer_reps WHERE username = :username"),
                 {"username": username}
             ).fetchone()
 
-            if not result:
-                return jsonify({"status": "fail", "message": "Customer Rep not found"}), 404
+            if result:
+                conn.execute(
+                    text("INSERT INTO password_reset_requests (username) VALUES (:username)"),
+                    {"username": username}
+                )
 
-            conn.execute(
-                text("INSERT INTO password_reset_requests (username) VALUES (:username)"),
-                {"username": username}
-            )
-            conn.commit()
+    except Exception:
+        current_app.logger.exception("Password reset request failed")
+        return jsonify({
+            "status": "error",
+            "message": "Unable to process request"
+        }), 500
 
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-    return jsonify({"status": "success", "message": "Reset request sent to admin."})
+    return jsonify({
+        "status": "success",
+        "message": "If the account exists, the reset request has been submitted."
+    }), 200
 
 # Customer Rep get users
 @support_bp.route('/customer-rep/get-users', methods=['GET'])
+@rep_required
 def get_users():
     try:
         with db.engine.connect() as conn:
@@ -64,6 +83,7 @@ def get_users():
 
 # Customer Rep edit user
 @support_bp.route('/customer-rep/update-user/<int:user_id>', methods=['PUT'])
+@rep_required
 def update_user(user_id):
     data = request.get_json()
     try:
@@ -94,6 +114,7 @@ def update_user(user_id):
 
 # Customer Rep Delete Users
 @support_bp.route('/customer-rep/delete-user/<int:user_id>', methods=['DELETE'])
+@rep_required
 def delete_user(user_id):
     try:
         with db.engine.connect() as conn:
@@ -106,6 +127,7 @@ def delete_user(user_id):
 
 # Customer Rep get bids
 @support_bp.route('/customer-rep/get-bids', methods=['GET'])
+@rep_required
 def get_bids():
     try:
         with db.engine.connect() as conn:
@@ -123,6 +145,7 @@ def get_bids():
     
 # Customer Rep delete bid
 @support_bp.route('/customer-rep/delete-bid/<int:bid_id>', methods=['DELETE'])
+@rep_required
 def delete_bid(bid_id):
     try:
         with db.engine.connect() as conn:
@@ -138,13 +161,22 @@ faq_list = []
 # User create FAQ
 @support_bp.route('/faq/create', methods=['POST'])
 def create_faq():
-    data = request.get_json()
-    question = data.get('question')
-    user_id = data.get('user_id')
+    user_id = session.get("user_id")
 
-    if not question or not user_id:
-        return jsonify({"status": "error", "message": "Missing fields"}), 400
+    if user_id is None:
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized"
+        }), 401
 
+    data = request.get_json(silent=True) or {}
+    question = data.get("question")
+
+    if not isinstance(question, str) or not question.strip():
+        return jsonify({
+            "status": "error",
+            "message": "Question is required"
+        }), 400
     try:
         with db.engine.connect() as conn:
             conn.execute(text("""
@@ -153,29 +185,48 @@ def create_faq():
             """), {"user_id": user_id, "question": question})
             conn.commit()
         return jsonify({"status": "success", "message": "FAQ added"}), 201
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    except Exception:
+        current_app.logger.exception("Failed to create FAQ")
+
+        return jsonify({
+            "status": "error",
+            "message": "Unable to submit question"
+        }), 500
 
 
 @support_bp.route('/faq', methods=['GET'])
 def get_faqs():
     try:
         with db.engine.connect() as conn:
-            result = conn.execute(text("SELECT id, user_id, question, answer, answered FROM faq")).fetchall()
+            result = conn.execute(
+                text("SELECT id, question, answer, answered FROM faq")
+            ).fetchall()
+
             faqs = [
                 {
                     "id": row.id,
-                    "user_id": row.user_id,
                     "question": row.question,
                     "answer": row.answer,
                     "answered": row.answered
-                } for row in result
+                }
+                for row in result
             ]
-        return jsonify({"status": "success", "faqs": faqs}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+
+        return jsonify({
+            "status": "success",
+            "faqs": faqs
+        }), 200
+
+    except Exception:
+        current_app.logger.exception("Failed to retrieve FAQs")
+
+        return jsonify({
+            "status": "error",
+            "message": "Unable to retrieve FAQs"
+        }), 500
 
 @support_bp.route('/faq/unanswered', methods=['GET'])
+@rep_required
 def get_unanswered_faqs():
     try:
         with db.engine.connect() as conn:
@@ -198,6 +249,7 @@ def get_unanswered_faqs():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @support_bp.route('/faq/answer/<int:faq_id>', methods=['PUT'])
+@rep_required
 def answer_faq(faq_id):
     data = request.get_json()
     answer = data.get('answer')
@@ -218,6 +270,7 @@ def answer_faq(faq_id):
 
 
 @support_bp.route('/customer-rep/delete-auction/<int:product_id>', methods=['DELETE'])
+@rep_required
 def delete_product(product_id):
     try:
         with db.engine.connect() as conn:
@@ -231,6 +284,7 @@ def delete_product(product_id):
     
 
 @support_bp.route('/customer-rep/get-auctions', methods=['GET'])
+@rep_required
 def get_auctions():
     try:
         with db.engine.connect() as conn:

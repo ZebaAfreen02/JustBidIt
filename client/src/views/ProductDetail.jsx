@@ -11,7 +11,7 @@ function ProductDetail() {
   const [history, setHistory] = useState([]);
 
 const fetchHistory = async () => {
-  const res = await fetch(`http://localhost:8000/api/bid-history/${productId}`);
+  const res = await fetch(`/api/bid-history/${productId}`);
   const data = await res.json();
   setHistory(data);
   setShowHistory(true);
@@ -21,7 +21,7 @@ const fetchHistory = async () => {
 
   useEffect(() => {
     if (productId) {
-      fetch(`http://localhost:8000/api/product?id=${productId}`)
+      fetch(`/api/product?id=${productId}`)
         .then((res) => res.json())
         .then((data) => setProduct(data))
         .catch((err) => console.error("Failed to load product:", err));

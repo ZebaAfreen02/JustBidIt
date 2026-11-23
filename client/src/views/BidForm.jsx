@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import React, { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import "../styles/BidForm.css"; 
@@ -22,14 +23,14 @@ function BidForm() {
   
     const payload = {
       productId,
-      userId: parseInt(userId),
+
       bidAmount,
       autoBid,
       maxLimit: autoBid ? maxLimit : null,
       increment: autoBid ? increment : null
     };
   
-    fetch("http://localhost:8000/api/bid", {
+    csrfFetch("/api/bid", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)

@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import { useEffect, useState } from 'react';
 import '../styles/createCustRep.css';
 
@@ -22,7 +23,7 @@ export default function ResetRequests() {
         e.preventDefault();
         setMessage('');
 
-        const response = await fetch(`/admin/reset-password`, {
+        const response = await csrfFetch(`/admin/reset-password`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: selectedUser, password: newPassword }),

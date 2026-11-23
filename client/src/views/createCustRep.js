@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import { useState } from 'react';
 import '../styles/createCustRep.css'; 
 
@@ -11,7 +12,7 @@ export default function CreateCustomerRep() {
     e.preventDefault();
     setMessage('');
     try {
-      const response = await fetch('/admin/create-customer-rep', {
+      const response = await csrfFetch('/admin/create-customer-rep', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),

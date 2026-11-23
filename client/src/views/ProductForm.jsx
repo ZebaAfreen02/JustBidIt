@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import React, { useEffect, useState } from "react";
 import Layout from "./layout";
 import "../styles/ProductForm.css";
@@ -26,7 +27,7 @@ function ProductForm() {
   useEffect(() => {
     const userId = localStorage.getItem("userId");
     if (userId) {
-      fetch(`http://localhost:8000/api/notifications?user_id=${userId}`)
+      fetch(`/api/notifications`)
         .then((res) => res.json())
         .then((data) => {
           setNotifications(data);
@@ -60,7 +61,7 @@ function ProductForm() {
     data.append("productImage", image);
 
     try {
-      const response = await fetch("http://localhost:8000/api/auctions", {
+      const response = await csrfFetch("/api/auctions", {
         method: "POST",
         body: data,
       });
@@ -143,7 +144,7 @@ function ProductForm() {
             <label>Product Image:</label>
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               onChange={handleImageChange}
               required
             />

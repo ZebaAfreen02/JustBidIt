@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 // src/components/Layout.js
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -13,10 +14,24 @@ function Layout({ children, notificationCount = 0, onAlertClick = () => { } }) {
 
 
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+    try {
+        const response = await csrfFetch('/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        if (!response.ok) {
+            throw new Error('Logout failed');
+        }
+
         localStorage.clear();
-        navigate("/login");
-    };
+        navigate('/login');
+    } catch (error) {
+        console.error('Logout error:', error);
+        alert('Unable to log out. Please try again.');
+    }
+};
 
     return (
         <div className="rep-dashboard-container">

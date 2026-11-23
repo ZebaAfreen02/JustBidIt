@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import React, { useEffect, useState } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../styles/custRepDashboard.css';
@@ -25,7 +26,7 @@ function CustFaq() {
 
   useEffect(() => {
     if (!userId) return;
-    fetch(`http://localhost:8000/api/notifications?user_id=${userId}`)
+    fetch(`/api/notifications`)
       .then(res => res.json())
       .then(data => {
         setNotifications(data);
@@ -36,10 +37,9 @@ function CustFaq() {
 
   const handleClearNotifications = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/notifications/clear', {
+      const res = await csrfFetch('/api/notifications/clear', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId })
       });
 
       if (res.ok) {
@@ -55,24 +55,34 @@ function CustFaq() {
   };
 
   const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!newQuestion.trim()) return;
+  e.preventDefault();
+  if (!newQuestion.trim()) return;
 
-    fetch('/api/faq/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question: newQuestion,
-        user_id: parseInt(userId)
-      })
-    }).then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          setQuestions([{ question: newQuestion, answer: null }, ...questions]);
-          setNewQuestion('');
-        }
-      });
-  };
+  csrfFetch('/api/faq/create', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: newQuestion
+    })
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'success') {
+        setQuestions([
+          { question: newQuestion, answer: null },
+          ...questions
+        ]);
+        setNewQuestion('');
+      } else {
+        alert(data.message || 'Unable to submit question');
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert('Unable to submit question');
+    });
+};
 
   const filteredQuestions = questions.filter(q =>
     q.question.toLowerCase().includes(searchTerm.toLowerCase())

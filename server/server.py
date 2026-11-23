@@ -1,10 +1,11 @@
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
-from flask import send_from_directory
+from flask import abort, send_from_directory
+from pathlib import Path
 from flask_cors import CORS
 from auth import auth_bp, db
-from products import product_bp, Product
+from products import IMAGE_TYPES, product_bp, Product
 from bids import bid_bp, Bid
 from admin import admin_bp 
 from smart_login import smart_login_bp
@@ -14,19 +15,32 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from notifications import create_notification, Notification
 from flask import request
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 import os
 from sqlalchemy import or_
+from extensions import limiter
 
 app = Flask(__name__)
-CORS(app)
+app.config['PRODUCT_UPLOAD_FOLDER'] = Path(app.root_path) / 'uploads'
+app.config["SECRET_KEY"] = os.environ["FLASK_SECRET_KEY"]
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = False  # Local HTTP development only
+# CSRF protection setup
+csrf = CSRFProtect(app)
+limiter.init_app(app)
+CORS(
+    app,
+    origins=["http://localhost:3000"],
+    supports_credentials=True
+)
 
 
-# app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://root:mysql@localhost:3306/aos'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://root:@localhost:3306/aos'
 
 
 
 
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ["DATABASE_URL"]
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
@@ -39,9 +53,19 @@ app.register_blueprint(support_bp)
 app.register_blueprint(notification_bp)
 
 
+@app.get("/api/csrf-token")
+def csrf_token():
+    return jsonify(csrf_token=generate_csrf()), 200, {"Cache-Control": "no-store"}
+
+
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
-    return send_from_directory(os.path.join(app.root_path, 'uploads'), filename)
+    image_type = IMAGE_TYPES.get(Path(filename).suffix.lower())
+    if image_type is None:
+        abort(404)
+    response = send_from_directory(app.config['PRODUCT_UPLOAD_FOLDER'], filename, mimetype=image_type[1])
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 # def check_ended_auctions():
 #     with app.app_context():
@@ -169,7 +193,7 @@ def check_ended_auctions():
 
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=check_ended_auctions, trigger="interval", seconds=10)
-scheduler.start()
 
 if __name__ == "__main__":
-    app.run(port=8000, debug=True)
+    scheduler.start()
+    app.run(port=8000)

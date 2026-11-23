@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import React, { useEffect, useState } from 'react';
 import '../styles/custRepDashboard.css';
 
@@ -6,7 +7,9 @@ export default function Questions() {
   const [answers, setAnswers] = useState({});
 
   useEffect(() => {
-    fetch('/api/faq/unanswered')
+    fetch('/api/faq/unanswered', {
+      credentials: 'include'
+    })
       .then(res => res.json())
       .then(data => {
         if (data.status === 'success') {
@@ -23,8 +26,9 @@ export default function Questions() {
     const answer = answers[id];
     if (!answer || !answer.trim()) return;
 
-    fetch(`/api/faq/answer/${id}`, {
+    csrfFetch(`/api/faq/answer/${id}`, {
       method: 'PUT',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ answer })
     })

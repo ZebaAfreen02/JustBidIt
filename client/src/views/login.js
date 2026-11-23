@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -16,8 +17,9 @@ function Login() {
     setMsg('Logging in...');
 
     try {
-      const response = await fetch("/login", {
+      const response = await csrfFetch("/login", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })
       });

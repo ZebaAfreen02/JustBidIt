@@ -1,8 +1,8 @@
-from flask import Blueprint, request, render_template, redirect, url_for, session, jsonify
+from flask import Blueprint, request, render_template, redirect, url_for, session, jsonify, current_app
 from sqlalchemy import text
-import hashlib
 from auth import db 
 from sqlalchemy.exc import IntegrityError
+from werkzeug.security import generate_password_hash
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -17,6 +17,12 @@ def admin_dashboard():
 # Create Customer Rep
 @admin_bp.route('/create-customer-rep', methods=['POST'])
 def create_customer_rep():
+    if 'admin_id' not in session:
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized"
+        }), 401
+
     username = request.json.get('username')
     password = request.json.get('password')
 
@@ -26,7 +32,7 @@ def create_customer_rep():
             "message": "Both username and password are required."
         }), 400
 
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    password_hash = generate_password_hash(password)
 
     try:
         with db.engine.begin() as conn:  # Automatically handles commit/rollback
@@ -63,6 +69,12 @@ def create_customer_rep():
 # Admin: Generate Sales Report
 @admin_bp.route('/generate-sales-report', methods=['GET'])
 def generate_sales_report():
+    if 'admin_id' not in session:
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized"
+        }), 401
+
     try:
         with db.engine.connect() as conn:
             # Total earnings
@@ -119,6 +131,12 @@ def generate_sales_report():
 @admin_bp.route('/reset-requests', methods=['GET'])
 def get_reset_requests():
 
+    if 'admin_id' not in session:
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized"
+        }), 401
+
     with db.engine.connect() as conn:
         rows = conn.execute(text("""
             SELECT id, username FROM password_reset_requests WHERE status = 'pending'
@@ -131,29 +149,84 @@ def get_reset_requests():
 # Approve a password reset request
 @admin_bp.route('/reset-password', methods=['POST'])
 def reset_customer_rep_password():
+    if 'admin_id' not in session:
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized"
+        }), 401
+
     data = request.get_json()
     username = data.get('username')
     new_password = data.get('password')
 
     if not username or not new_password:
         return jsonify({"status": "error", "message": "Missing fields"}), 400
+    try:
+        with db.engine.begin() as conn:
+            pending_request = conn.execute(
+                text("""
+                    SELECT id
+                    FROM password_reset_requests
+                    WHERE username = :uname AND status = 'pending'
+                    LIMIT 1
+                    FOR UPDATE
+                """),
+                {"uname": username}
+            ).fetchone()
 
-    hashed_pw = hashlib.sha256(new_password.encode()).hexdigest()
+            if pending_request is None:
+                return jsonify({
+                    "status": "error",
+                    "message": "No pending password reset request found"
+                }), 400
 
-    with db.engine.connect() as conn:
-        conn.execute(text("""
-            UPDATE customer_reps SET password_hash = :pw WHERE username = :uname
-        """), {"pw": hashed_pw, "uname": username})
+            hashed_pw = generate_password_hash(new_password)
 
-        conn.execute(text("""
-            UPDATE password_reset_requests SET status = 'resolved' WHERE username = :uname
-        """), {"uname": username})
+            result = conn.execute(
+                text("""
+                    UPDATE customer_reps
+                    SET password_hash = :pw
+                    WHERE username = :uname
+                """),
+                {"pw": hashed_pw, "uname": username}
+            )
 
-        conn.commit()
+            if result.rowcount != 1:
+                raise ValueError("Customer representative not found")
 
-    return jsonify({"status": "success", "message": "Password reset successful"})   
+            conn.execute(
+                text("""
+                    UPDATE password_reset_requests
+                    SET status = 'resolved'
+                    WHERE username = :uname AND status = 'pending'
+                """),
+                {"uname": username}
+            )
+
+    except Exception:
+        current_app.logger.exception("Failed to reset customer representative password")
+        return jsonify({
+            "status": "error",
+            "message": "Unable to reset password"
+        }), 500
+
+    return jsonify({
+        "status": "success",
+        "message": "Password reset successful"
+    })
 
 # Admin logout
-@admin_bp.route('/logout')
+@admin_bp.route('/logout', methods=['POST'])
 def admin_logout():
-    return jsonify({"status": "success", "message": "Logged out."})
+    if 'admin_id' not in session and 'rep_id' not in session:
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized"
+        }), 401
+
+    session.clear()
+
+    return jsonify({
+        "status": "success",
+        "message": "Logged out successfully"
+    }), 200

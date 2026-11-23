@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import '../styles/adminLogin.css';
@@ -13,8 +14,9 @@ export default function AdminLogin() {
         setError('');
 
         try {
-            const response = await fetch('/admin/login', {
+            const response = await csrfFetch('/admin/login', {
                 method: 'POST',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
             });

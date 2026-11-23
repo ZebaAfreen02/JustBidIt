@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import '../styles/login.css'; // IKEA styles
@@ -29,7 +30,7 @@ function ResetPassword() {
     if (!token) return;
 
     try {
-      const res = await fetch('/reset-password', {
+      const res = await csrfFetch('/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, newPassword: data.password }),

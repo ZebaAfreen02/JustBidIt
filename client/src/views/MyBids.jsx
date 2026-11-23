@@ -10,19 +10,27 @@ function MyBids() {
   const userId = localStorage.getItem("userId");
 
   useEffect(() => {
+    setBids([]);
+    setNotificationCount(0);
     if (!userId) return;
 
-    fetch(`http://localhost:8000/api/bids/user/${userId}`)
-      .then((res) => res.json())
-      .then((data) => setBids(data))
-      .catch((err) => console.error("Failed to fetch bids", err));
-  }, []);
+    const controller = new AbortController();
+    const { signal } = controller;
+    const loadList = async (url, update) => {
+      try {
+        const response = await fetch(url, { signal });
+        if (response.status === 401 || response.status === 403) return;
+        if (!response.ok) throw new Error(`Request failed (${response.status})`);
+        const data = await response.json();
+        if (!signal.aborted && Array.isArray(data)) update(data);
+      } catch (error) {
+        if (!signal.aborted) console.error("Failed to load account data", error);
+      }
+    };
 
-  useEffect(() => {
-    fetch(`http://localhost:8000/api/notifications?user_id=${userId}`)
-      .then((res) => res.json())
-      .then((data) => setNotificationCount(data.length))
-      .catch((err) => console.error("Failed to fetch notifications", err));
+    loadList(`/api/bids/user/${userId}`, setBids);
+    loadList("/api/notifications", (items) => setNotificationCount(items.length));
+    return () => controller.abort();
   }, [userId]);
 
   const getTimeRemaining = (closingDate) => {

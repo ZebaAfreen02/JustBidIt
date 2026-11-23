@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import "../styles/signup.css";
@@ -36,7 +37,7 @@ export default function SignupForm() {
         };
 
         try {
-            const response = await fetch('/signup', {
+            const response = await csrfFetch('/signup', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(dataToSend)

@@ -1,6 +1,7 @@
-from flask import request, jsonify, Blueprint
+from flask import request, jsonify, Blueprint, session
 from auth import db
 from datetime import datetime
+from math import isfinite
 from products import Product
 from notifications import create_notification
 bid_bp = Blueprint('bid', __name__)
@@ -30,16 +31,30 @@ class BidHistory(db.Model):
 
 @bid_bp.route('/api/bid', methods=['POST'])
 def place_bid():
+    user_id = session.get("user_id")
+    if user_id is None:
+        return jsonify(error="Unauthorized"), 401
+
     try:
         data = request.json
 
+        increment = None
+        if data['autoBid']:
+            raw_increment = data.get('increment')
+            try:
+                increment = float(raw_increment) if not isinstance(raw_increment, bool) else None
+            except (TypeError, ValueError, OverflowError):
+                pass
+            if increment is None or not isfinite(increment) or increment <= 0:
+                return jsonify(error="Auto-bid increment must be a positive, finite number"), 400
+
         new_bid = Bid(
             product_id=data['productId'],
-            user_id=data['userId'],
+            user_id=user_id,
             bid_amount=float(data['bidAmount']),
             auto_bid=data['autoBid'],
             max_limit=float(data['maxLimit']) if data.get('maxLimit') else None,
-            increment=float(data['increment']) if data.get('increment') else None
+            increment=increment
         )
         db.session.add(new_bid)
         db.session.commit()
@@ -69,16 +84,19 @@ def handle_bidding(product_id):
         top_auto = auto_bids[0]
         current_user_id = top_auto.user_id
         current_price = top_auto.bid_amount
-        increment = top_auto.increment or 1
+        increment = top_auto.increment
+        # Older rows can contain missing or invalid increments.
+        if increment is None or not isfinite(increment) or increment <= 0:
+            increment = 1
         max_limit = top_auto.max_limit
 
         if len(auto_bids) > 1:
             second_limit = auto_bids[1].max_limit
-            while current_price + increment <= second_limit and current_price + increment <= max_limit:
+            while current_price < current_price + increment <= second_limit and current_price + increment <= max_limit:
                 current_price += increment
 
         if top_manual and top_manual.bid_amount >= current_price:
-            while current_price + increment <= max_limit and current_price <= top_manual.bid_amount:
+            while current_price < current_price + increment <= max_limit and current_price <= top_manual.bid_amount:
                 current_price += increment
 
             if current_price > top_manual.bid_amount:
@@ -128,6 +146,11 @@ def handle_bidding(product_id):
     print(f"[INFO] Final Bid: Product {product_id} → ${current_price} (Lead: User {current_user_id})")
 @bid_bp.route('/api/bids/user/<int:user_id>', methods=['GET'])
 def get_user_bids(user_id):
+    if "user_id" not in session:
+        return jsonify(error="Unauthorized"), 401
+    if session["user_id"] != user_id:
+        return jsonify(error="Forbidden"), 403
+
     bids = db.session.query(Bid, Product).join(Product, Bid.product_id == Product.id, isouter=True).filter(Bid.user_id == user_id).all()
     result = [{
         "product_name": p.name,

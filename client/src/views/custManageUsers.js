@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import { useState, useEffect } from 'react';
 import { Pencil, Trash2, Eye } from 'lucide-react';
 import { Modal, Button } from 'react-bootstrap';
@@ -21,7 +22,9 @@ export default function ManageUsers() {
   useEffect(() => {
     // Fetch all users when the component loads
     const fetchUsers = async () => {
-      const response = await fetch('api/customer-rep/get-users');
+      const response = await fetch('/api/customer-rep/get-users', {
+        credentials: 'include'
+      });
       const data = await response.json();
       if (data.status === 'success') {
         setUsers(data.users);
@@ -39,8 +42,9 @@ export default function ManageUsers() {
 
   const handleSaveUser = async () => {
     try {
-      const response = await fetch(`/api/customer-rep/update-user/${editUser.id}`, {
+      const response = await csrfFetch(`/api/customer-rep/update-user/${editUser.id}`, {
         method: 'PUT',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editUser)
       });
@@ -66,10 +70,10 @@ export default function ManageUsers() {
     setFadeUserId(userToDelete.id); // trigger animation
     setTimeout(async () => {
       try {
-        const response = await fetch(`/api/customer-rep/delete-user/${userToDelete.id}`, {
-          method: 'DELETE'
+        const response = await csrfFetch(`/api/customer-rep/delete-user/${userToDelete.id}`, {
+          method: 'DELETE',
+          credentials: 'include'
         });
-
         const data = await response.json();
 
         if (data.status === 'success') {

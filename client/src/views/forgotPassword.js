@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import React, { useState } from 'react';
 import '../styles/login.css';
 
@@ -10,7 +11,7 @@ export default function ForgotPassword() {
         setMsg("Sending reset link...");
 
         try {
-            const res = await fetch('/request-reset', {
+            const res = await csrfFetch('/request-reset', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email }),

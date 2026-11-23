@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/forgotRepPassword.css'; 
@@ -11,7 +12,7 @@ export default function ForgotRepPassword() {
         e.preventDefault();
 
         try {
-            const response = await fetch('/api/request-password-reset', {
+            const response = await csrfFetch('/api/request-password-reset', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username }),

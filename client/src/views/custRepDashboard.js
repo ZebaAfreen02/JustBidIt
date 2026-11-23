@@ -1,3 +1,4 @@
+import csrfFetch from '../csrfFetch';
 import { useState } from 'react';
 import Questions from './custQuestions';
 import ManageAuctions from './custManageAuctions';
@@ -9,9 +10,23 @@ import '../styles/custRepDashboard.css';
 export default function CustomerRepDashboard() {
   const [activeView, setActiveView] = useState('questions');
 
-  const handleLogout = () => {
-    window.location.href = 'admin-login';
-  };
+  const handleLogout = async () => {
+  try {
+    const response = await csrfFetch('/admin/logout', {
+      method: 'POST',
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      throw new Error('Logout failed');
+    }
+
+    window.location.href = '/admin-login';
+  } catch (error) {
+    console.error('Logout error:', error);
+    alert('Unable to log out. Please try again.');
+  }
+};
 
   const renderView = () => {
     switch (activeView) {

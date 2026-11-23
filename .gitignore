@@ -49,3 +49,16 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Local environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Python generated files
+__pycache__/
+*.pyc
+
+# Local development artifacts
+.venv/
+.pytest_cache/
+/server/uploads/*
