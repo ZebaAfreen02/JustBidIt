@@ -1,4 +1,5 @@
 from flask import Blueprint, request, render_template, redirect, url_for, session, jsonify, current_app
+from mysql.connector.errorcode import ER_DUP_ENTRY
 from sqlalchemy import text
 from auth import db 
 from sqlalchemy.exc import IntegrityError
@@ -45,8 +46,7 @@ def create_customer_rep():
             )
 
     except IntegrityError as e:
-        # Check if it's a duplicate username error
-        if 'unique constraint' in str(e).lower() or 'duplicate key' in str(e).lower():
+        if getattr(e.orig, 'errno', None) == ER_DUP_ENTRY:
             return jsonify({
                 "status": "error",
                 "message": f"The username '{username}' is already taken. Please choose another."
@@ -56,10 +56,10 @@ def create_customer_rep():
             "message": "An unexpected database error occurred."
         }), 500
 
-    except Exception as e:
+    except Exception:
         return jsonify({
             "status": "error",
-            "message": f"Server error: {str(e)}"
+            "message": "An unexpected database error occurred."
         }), 500
 
     return jsonify({

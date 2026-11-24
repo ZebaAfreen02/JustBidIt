@@ -16,7 +16,7 @@ class Bid(db.Model):
     auto_bid = db.Column(db.Boolean, default=False)
     max_limit = db.Column(db.Float)
     increment = db.Column(db.Float)
-    created_at = db.Column(db.DateTime, default=datetime.now())
+    created_at = db.Column(db.DateTime, default=datetime.now)
 
 class BidHistory(db.Model):
     __tablename__ = 'bid_history'
@@ -26,7 +26,17 @@ class BidHistory(db.Model):
     user_id = db.Column(db.Integer, nullable=False)
     bid_amount = db.Column(db.Float)
     auto_bid = db.Column(db.Boolean)
-    created_at = db.Column(db.DateTime, default=datetime.now())
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+
+def positive_amount(value):
+    if not isinstance(value, (str, int, float)) or isinstance(value, bool):
+        return None
+    try:
+        amount = float(value)
+    except (ValueError, OverflowError):
+        return None
+    return amount if isfinite(amount) and amount > 0 else None
 
 
 @bid_bp.route('/api/bid', methods=['POST'])
@@ -36,30 +46,59 @@ def place_bid():
         return jsonify(error="Unauthorized"), 401
 
     try:
-        data = request.json
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or not isinstance(data.get('autoBid'), bool):
+            return jsonify(error="Invalid bid request"), 400
 
+        raw_product_id = data.get('productId')
+        if not isinstance(raw_product_id, (str, int)) or isinstance(raw_product_id, bool):
+            return jsonify(error="Invalid auction ID"), 400
+        try:
+            product_id = int(raw_product_id)
+        except ValueError:
+            return jsonify(error="Invalid auction ID"), 400
+        if not 0 < product_id <= 2_147_483_647:
+            return jsonify(error="Invalid auction ID"), 400
+
+        product = db.session.get(Product, product_id)
+        if product is None:
+            return jsonify(error="Auction not found"), 404
+        if product.closing_date is None or product.closing_date <= datetime.now():
+            return jsonify(error="Auction is closed"), 400
+
+        bid_amount = positive_amount(data.get('bidAmount'))
+        if bid_amount is None:
+            return jsonify(error="Bid amount must be a positive, finite number"), 400
+        if bid_amount < (product.price or 0):
+            return jsonify(error="Bid amount must meet the starting price"), 400
+
+        auto_bid = data['autoBid']
+        max_limit = None
         increment = None
-        if data['autoBid']:
-            raw_increment = data.get('increment')
-            try:
-                increment = float(raw_increment) if not isinstance(raw_increment, bool) else None
-            except (TypeError, ValueError, OverflowError):
-                pass
-            if increment is None or not isfinite(increment) or increment <= 0:
+        if auto_bid:
+            max_limit = positive_amount(data.get('maxLimit'))
+            if max_limit is None or max_limit < bid_amount:
+                return jsonify(error="Auto-bid maximum must be finite and at least the bid amount"), 400
+            increment = positive_amount(data.get('increment'))
+            if increment is None:
                 return jsonify(error="Auto-bid increment must be a positive, finite number"), 400
 
+        competing_amount = max_limit if auto_bid else bid_amount
+        if product.bid_price and competing_amount <= product.bid_price:
+            return jsonify(error="Bid must exceed the current price"), 400
+
         new_bid = Bid(
-            product_id=data['productId'],
+            product_id=product_id,
             user_id=user_id,
-            bid_amount=float(data['bidAmount']),
-            auto_bid=data['autoBid'],
-            max_limit=float(data['maxLimit']) if data.get('maxLimit') else None,
+            bid_amount=bid_amount,
+            auto_bid=auto_bid,
+            max_limit=max_limit,
             increment=increment
         )
         db.session.add(new_bid)
         db.session.commit()
 
-        handle_bidding(product_id=data['productId'])
+        handle_bidding(product_id=product_id)
         return jsonify({"message": "Bid submitted successfully!"}), 201
 
     except Exception as e:

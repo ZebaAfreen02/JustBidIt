@@ -72,9 +72,9 @@ function ResetPassword() {
               required: "Password is required",
               minLength: { value: 8, message: "Must be at least 8 characters" },
               validate: (val) =>
-                /[A-Za-z]/.test(val) &&
+                (/[A-Za-z]/.test(val) &&
                 /\d/.test(val) &&
-                /[@$!%*?&]/.test(val) ||
+                /[@$!%*?&]/.test(val)) ||
                 "Must include a letter, number, and special character"
             })}
           />

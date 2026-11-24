@@ -4,8 +4,6 @@ import { useNavigate } from "react-router-dom";
 import "../styles/products.css";
 import "../styles/custRepDashboard.css";
 import Layout from "./layout";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faUserCircle } from "@fortawesome/free-solid-svg-icons";
 
 // Countdown helper
 const calculateTimeLeft = (closingDate) => {

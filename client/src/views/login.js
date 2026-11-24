@@ -8,7 +8,6 @@ function Login() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [stayLoggedIn, setStayLoggedIn] = useState(false);
   const [msg, setMsg] = useState('');
   const navigate = useNavigate();
 

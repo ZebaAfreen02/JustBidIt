@@ -155,7 +155,7 @@ export default function SignupForm() {
                             {...register("confirmPassword", {
                                 required: "Please confirm password",
                                 validate: (val) =>
-                                    val === password && isPasswordStrong(password) ||
+                                    (val === password && isPasswordStrong(password)) ||
                                     "Passwords must match and meet strength rules"
                             })}
                         />

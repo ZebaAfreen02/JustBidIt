@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import MyBids from './MyBids';
 
 jest.mock('./layout', () => function Layout({ children, notificationCount, onAlertClick }) {
@@ -54,6 +54,6 @@ test('reloads for the new identity and ignores a stale response', async () => {
   await screen.findByText('New listing');
   expect(oldSignal.aborted).toBe(true);
   await act(async () => finishOldRequest(reply(200, [{ product_name: 'Old listing' }])));
-  await waitFor(() => expect(screen.getByText('New listing')).toBeInTheDocument());
+  expect(screen.getByText('New listing')).toBeInTheDocument();
   expect(screen.queryByText('Old listing')).not.toBeInTheDocument();
 });

@@ -10,7 +10,6 @@ export default function ManageAuctions() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [auctionToDelete, setAuctionToDelete] = useState(null);
-  const [infoPopupId, setInfoPopupId] = useState(null);
 
   useEffect(() => {
     fetch('/api/customer-rep/get-auctions', {
@@ -84,7 +83,7 @@ export default function ManageAuctions() {
           <tr>
             <th>Product</th>
             <th>Brand</th>
-            <th>Seller</th>
+            <th>Highest Bidder</th>
             <th>Ends On</th>
             <th>Status</th>
             <th></th>
@@ -159,7 +158,7 @@ export default function ManageAuctions() {
           <Modal.Body>
             <p><strong>Product:</strong> {selectedAuction.name}</p>
             <p><strong>Brand:</strong> {selectedAuction.brand}</p>
-            <p><strong>Seller:</strong> {selectedAuction.seller}</p>
+            <p><strong>Highest Bidder:</strong> {selectedAuction.seller}</p>
             <p><strong>Price:</strong> ${selectedAuction.price}</p>
             <p><strong>Closing Date:</strong> {formatDate(selectedAuction.closing_date)}</p>
             <p><strong>Status:</strong> {isClosed(selectedAuction.closing_date) ? 'Closed' : 'Open'}</p>

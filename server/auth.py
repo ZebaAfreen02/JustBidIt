@@ -1,6 +1,6 @@
 import token
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request, session
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
@@ -55,23 +55,15 @@ def send_reset_email(recipient_email, token):
     frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
     reset_link = f"{frontend_url.rstrip('/')}/reset-password?token={token}"
 
-    try:
-        message = MIMEText(f"Click the link to reset your password:\n\n{reset_link}", "plain")
-        message['Subject'] = 'Reset Your Password'
-        message['From'] = sender_email
-        message['To'] = recipient_email
+    message = MIMEText(f"Click the link to reset your password:\n\n{reset_link}", "plain")
+    message['Subject'] = 'Reset Your Password'
+    message['From'] = sender_email
+    message['To'] = recipient_email
 
-        print("Connecting to Gmail SMTP...")
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
-            print("Logging in...")
-            server.login(sender_email, app_password)
-            print("Sending email to:", recipient_email)
-            server.sendmail(sender_email, recipient_email, message.as_string())
-            print("Email sent successfully.")
-    except Exception as e:
-        print("Email sending failed:", e)
-        raise
+    context = ssl.create_default_context()
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+        server.login(sender_email, app_password)
+        server.sendmail(sender_email, recipient_email, message.as_string())
 
 # ---------- ROUTES ----------
 
@@ -167,27 +159,24 @@ def request_reset():
         }), 400
 
     user = User.query.filter_by(email=email.strip()).first()
+    if user:
+        token = generate_token()
+        expiration = datetime.utcnow() + timedelta(minutes=15)
 
-    if not user:
-        return jsonify({
-            "status": "success",
-            "message": "If an account exists with this email, a reset link will be sent."
-        }), 200
+        PasswordReset.query.filter_by(user_id=user.id).delete()
+        reset = PasswordReset(user_id=user.id, token=token, expires_at=expiration)
+        db.session.add(reset)
+        db.session.commit()
 
-    token = generate_token()
-    expiration = datetime.utcnow() + timedelta(minutes=15)
+        try:
+            send_reset_email(user.email, token)
+        except Exception:
+            current_app.logger.warning("Password reset email delivery failed")
 
-    PasswordReset.query.filter_by(user_id=user.id).delete()
-    reset = PasswordReset(user_id=user.id, token=token, expires_at=expiration)
-    db.session.add(reset)
-    db.session.commit()
-
-    try:
-        send_reset_email(user.email, token)
-        return jsonify({"status": "success", "message": "Reset link sent"}), 200
-    except Exception as e:
-        print("Email error:", e)
-        return jsonify({"status": "error", "message": "Failed to send email"}), 500
+    return jsonify({
+        "status": "success",
+        "message": "If an account exists with this email, a reset link will be sent."
+    }), 200
 
 
 @auth_bp.route("/reset-password", methods=["POST"])

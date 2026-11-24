@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Login from './views/login';
@@ -20,8 +20,6 @@ import MyBids from './views/MyBids';
 
 
 function App() {
-  const [dbStatus, setDbStatus] = useState(null);
-
   return (
     <Router>
       <div>
